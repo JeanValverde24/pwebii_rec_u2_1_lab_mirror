@@ -1,24 +1,59 @@
+name: Semgrep
+
 on:
   workflow_dispatch: {}
   pull_request: {}
   push:
     branches:
-    - main
-    - master
+      - main
+      - master
     paths:
-    - .github/workflows/semgrep.yml
+      - .github/workflows/semgrep.yml
   schedule:
-  # random HH:MM to avoid a load spike on GitHub Actions at 00:00
-  - cron: 58 17 * * *
-name: Semgrep
+    - cron: '58 17 * * *'
+
 jobs:
   semgrep:
-    name: semgrep/ci
+    name: Semgrep Scan
     runs-on: ubuntu-20.04
     env:
       SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
     container:
       image: returntocorp/semgrep
     steps:
-    - uses: actions/checkout@v4
-    - run: semgrep ci
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep scan
+        run: |
+          semgrep ci --json > semgrep_results.json || true
+
+      - name: Parse Semgrep results and convert to Markdown
+        run: |
+          echo "## 🛡️ Semgrep Security Scan Results" > semgrep_results.md
+          echo "" >> semgrep_results.md
+          findings=$(jq '.results | length' semgrep_results.json)
+          
+          if [[ "$findings" -eq 0 ]]; then
+            echo "✅ No security findings detected!" >> semgrep_results.md
+          else
+            jq -r '.results[] | "### 🔹 Rule: \(.check_id)\n- **File:** \(.path)\n- **Message:** \(.extra.message)\n- [🔗 Details](\(.extra.metadata.owasp_category))\n"' semgrep_results.json >> semgrep_results.md
+          fi
+
+      - name: Update README.md with Semgrep results
+        run: |
+          sed -i '/## 🛡️ Semgrep Security Scan Results/,$d' README.md
+          cat semgrep_results.md >> README.md
+
+      - name: Commit and push Semgrep results
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add README.md
+          git commit -m "🔍 Update Semgrep Security Scan results in README.md" || echo "No changes to commit"
+          git push || echo "No changes to push"
+
+      - name: Add annotations for security findings
+        if: success()
+        run: |
+          jq -r '.results[] | "::warning file=\(.path),title=Semgrep Security Issue::\(.extra.message)"' semgrep_results.json
