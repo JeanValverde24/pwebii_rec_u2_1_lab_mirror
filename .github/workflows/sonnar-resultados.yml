@@ -33,10 +33,10 @@ jobs:
           dotnet test --no-build --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger trx
         working-directory: src
 
-      - name: Verify Coverage File Exists
+      - name: Verificar archivos de cobertura generados
         run: |
-          echo "Verificando archivos de cobertura en TestResults..."
-          ls -R src/TestResults/ || echo "⚠️ No se encontró ningún archivo de cobertura."
+          echo "Listando archivos en src/TestResults/"
+          ls -R src/TestResults/ || echo "⚠️ No se encontraron archivos de cobertura."
 
       - name: Install ReportGenerator
         run: dotnet tool install --global dotnet-reportgenerator-globaltool
@@ -47,7 +47,7 @@ jobs:
 
       - name: Convert coverage to Markdown
         run: |
-          ~/.dotnet/tools/reportgenerator -reports:src/TestResults/**/coverage.cobertura.xml -targetdir:coverage -reporttypes:MarkdownSummary
+          ~/.dotnet/tools/reportgenerator -reports:src/TestResults/**/*.cobertura.xml -targetdir:coverage -reporttypes:MarkdownSummary
 
       - name: Extract coverage percentage
         id: coverage
@@ -142,7 +142,7 @@ jobs:
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-          git remote set-url origin https://x-access-token:${PAT_TOKEN}@github.com/TU_USUARIO/TU_REPOSITORIO.git
+          git remote set-url origin https://x-access-token:${PAT_TOKEN}@github.com/JeanValverde24/pwebii_rec_u2_1_lab_mirror.git
           git add README.md
           git commit -m "📊 Update SonarCloud metrics in README.md" || echo "No changes to commit"
           git push origin HEAD:main || echo "No changes to push"
