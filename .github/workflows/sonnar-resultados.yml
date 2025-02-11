@@ -1,10 +1,15 @@
-name: SonarCloud & Code Coverage Analysis
+name: SonarCloud Analysis & Code Coverage
 
 on:
   push:
     branches:
       - main
-      - master
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   coverage:
@@ -12,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup .NET
@@ -20,105 +25,114 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore dependencies
+      - name: Restore Dependencies
         run: dotnet restore
         working-directory: src
 
-      - name: Build project
+      - name: Build Project
         run: dotnet build --no-restore
         working-directory: src
 
-      - name: Run tests and collect coverage
+      - name: Run Tests with Coverage
         run: |
           dotnet test --no-build --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger trx
         working-directory: src
 
-      - name: Verificar archivos de cobertura generados
+      - name: Verify Coverage File Exists
         run: |
-          echo "Listando archivos en src/TestResults/"
-          ls -R src/TestResults/ || echo "⚠️ No se encontraron archivos de cobertura."
+          echo "🔍 Listing files in src/TestResults/"
+          ls -R src/TestResults/ || echo "⚠️ No coverage files found."
 
       - name: Install ReportGenerator
         run: dotnet tool install --global dotnet-reportgenerator-globaltool
 
-      - name: Verify ReportGenerator Installation
+      - name: Convert Coverage to XML
         run: |
-          ~/.dotnet/tools/reportgenerator --help || echo "✅ ReportGenerator instalado correctamente."
-
-      - name: Convert coverage to HTML
-        run: |
-          ~/.dotnet/tools/reportgenerator -reports:src/TestResults/**/coverage.cobertura.xml -targetdir:coverage -reporttypes:Html
-
-      - name: Extract coverage percentage
+          ~/.dotnet/tools/reportgenerator -reports:src/TestResults/**/coverage.cobertura.xml -targetdir:coverage -reporttypes:Cobertura || echo "⚠️ No coverage files found."
+      
+      - name: Extract Coverage Metrics
         id: coverage_metrics
         run: |
-          TOTAL_COVERAGE=$(grep -oP '(?<=<coverage line-rate=")\d+\.\d+' coverage/index.html || echo "0.00")
-          echo "TOTAL_COVERAGE=$TOTAL_COVERAGE" >> $GITHUB_ENV
-          echo "Total Coverage: $TOTAL_COVERAGE%"
+          COVERAGE=$(grep -oP '(?<=<coverage line-rate=")\d+\.\d+' coverage/Cobertura.xml || echo "0.00")
+          echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
+          echo "Coverage: $COVERAGE%"
 
-      - name: Display Coverage Metrics in Annotations
+      - name: Publish Coverage Metrics as Annotations
         run: |
-          echo "::notice title=Code Coverage Report::| Metric | Value |
-          |--------|-------|
-          | Total Coverage | ${{ env.TOTAL_COVERAGE }}% |"
+          echo "## 📊 Code Coverage Metrics" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric      | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Coverage   | ${{ env.COVERAGE }}% |" >> $GITHUB_STEP_SUMMARY
 
-  sonar:
+  sonarcloud:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
     needs: coverage
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '6.0.x'
+          dotnet-version: '8.0.x'
 
-      - name: Restore dependencies
+      - name: Restore Dependencies
         run: dotnet restore
         working-directory: src
 
-      - name: Build project
+      - name: Build Project
         run: dotnet build --no-restore
-        working-directory: src
-
-      - name: Prepare SonarCloud Analysis
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          dotnet tool install --global dotnet-sonarscanner
-          dotnet sonarscanner begin /k:"TU_PROYECTO_KEY" /o:"TU_ORG_KEY" /d:sonar.token="${{ secrets.SONAR_TOKEN }}" /d:sonar.host.url="https://sonarcloud.io"
-        working-directory: src
-
-      - name: Run SonarCloud Analysis
-        run: |
-          dotnet build
-          dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
         working-directory: src
 
       - name: Fetch SonarCloud Metrics
         id: sonar_metrics
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          SECURITY_HOTSPOTS=$(curl -s https://sonarcloud.io/api/measures/component?component=TU_PROYECTO_KEY&metricKeys=security_hotspots | jq '.component.measures[0].value')
-          CODE_SMELLS=$(curl -s https://sonarcloud.io/api/measures/component?component=TU_PROYECTO_KEY&metricKeys=code_smells | jq '.component.measures[0].value')
-          COVERAGE=$(curl -s https://sonarcloud.io/api/measures/component?component=TU_PROYECTO_KEY&metricKeys=coverage | jq '.component.measures[0].value')
-          BUGS=$(curl -s https://sonarcloud.io/api/measures/component?component=TU_PROYECTO_KEY&metricKeys=bugs | jq '.component.measures[0].value')
-          DUPLICATIONS=$(curl -s https://sonarcloud.io/api/measures/component?component=TU_PROYECTO_KEY&metricKeys=duplicated_lines_density | jq '.component.measures[0].value')
+          SONAR_API_URL="https://sonarcloud.io/api/measures/component"
+          PROJECT_KEY="JeanValverde24_pwebii_rec_u2_1_lab_mirror"
+          METRICS="bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,complexity,ncloc,cognitive_complexity,comment_lines_density,security_rating,reliability_rating,sqale_rating"
+          echo "Fetching SonarCloud Metrics..."
+          RESPONSE=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_API_URL?component=$PROJECT_KEY&metricKeys=$METRICS")
+          if [[ -z "$RESPONSE" || "$RESPONSE" == *"errors"* ]]; then
+            echo "SonarCloud API Response: $RESPONSE"
+            echo "Error fetching SonarCloud metrics. Please check the project key and SonarCloud API token."
+            exit 1
+          fi
+          echo "SonarCloud API Response: $RESPONSE"
+          echo "response=$RESPONSE" >> $GITHUB_ENV
 
-          echo "SECURITY_HOTSPOTS=$SECURITY_HOTSPOTS" >> $GITHUB_ENV
-          echo "CODE_SMELLS=$CODE_SMELLS" >> $GITHUB_ENV
-          echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
-          echo "BUGS=$BUGS" >> $GITHUB_ENV
-          echo "DUPLICATIONS=$DUPLICATIONS" >> $GITHUB_ENV
-
-      - name: Display SonarCloud Metrics in Annotations
+      - name: Publish SonarCloud Metrics as Annotations
         run: |
-          echo "::notice title=SonarCloud Report::| Metric | Value |
-          |--------|-------|
-          | Security Hotspots | ${{ env.SECURITY_HOTSPOTS }} |
-          | Code Smells | ${{ env.CODE_SMELLS }} |
-          | Coverage | ${{ env.COVERAGE }}% |
-          | Bugs | ${{ env.BUGS }} |
-          | Duplications | ${{ env.DUPLICATIONS }}% |"
+          echo "## 📊 SonarCloud Metrics" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric               | Value   | Icon       |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------------------|---------|------------|" >> $GITHUB_STEP_SUMMARY
+          echo $RESPONSE | jq -r '.component.measures[] | 
+          if .metric == "coverage" then "| Coverage             | \(.value)% | :white_check_mark: |" 
+          elif .metric == "complexity" then "| Complexity           | \(.value) | :triangular_ruler: |" 
+          elif .metric == "ncloc" then "| Lines of Code        | \(.value) | :scroll: |" 
+          elif .metric == "security_rating" then "| Security Rating      | \(.value) | :shield: |" 
+          elif .metric == "reliability_rating" then "| Reliability Rating   | \(.value) | :tools: |" 
+          elif .metric == "sqale_rating" then "| Maintainability      | \(.value) | :recycle: |" 
+          elif .metric == "code_smells" then "| Code Smells          | \(.value) | :nose: |" 
+          elif .metric == "duplicated_lines_density" then "| Duplications         | \(.value)% | :twisted_rightwards_arrows: |" 
+          elif .metric == "cognitive_complexity" then "| Cognitive Complexity | \(.value) | :brain: |" 
+          elif .metric == "bugs" then "| Bugs                 | \(.value) | :bug: |" 
+          elif .metric == "comment_lines_density" then "| Comment Density      | \(.value)% | :speech_balloon: |" 
+          else empty end' >> $GITHUB_STEP_SUMMARY
+        env:
+          RESPONSE: ${{ env.response }}
+
+      - name: SonarCloud Scan
+        uses: sonarsource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.organization=jeanvalverde24
+            -Dsonar.projectKey=JeanValverde24_pwebii_rec_u2_1_lab_mirror
+            -Dsonar.sources=src
+            -Dsonar.cs.opencover.reportsPaths=coverage/Cobertura.xml
