@@ -56,13 +56,16 @@ jobs:
           echo "" >> README.md
           cat coverage/Summary.md >> README.md
 
-      - name: Commit and push results
+      - name: Commit and push coverage results
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
+          git remote set-url origin https://x-access-token:${PAT_TOKEN}@github.com/YOUR_USERNAME/YOUR_REPOSITORY.git
           git add README.md
           git commit -m "📈 Update Code Coverage report in README.md" || echo "No changes to commit"
-          git push || echo "No changes to push"
+          git push origin HEAD:main || echo "No changes to push"
 
       - name: Add annotation for code coverage
         if: success()
@@ -123,12 +126,15 @@ jobs:
           cat sonar_metrics.md >> README.md
 
       - name: Commit and push Sonar metrics
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
+          git remote set-url origin https://x-access-token:${PAT_TOKEN}@github.com/YOUR_USERNAME/YOUR_REPOSITORY.git
           git add README.md
           git commit -m "📊 Update SonarCloud metrics in README.md" || echo "No changes to commit"
-          git push || echo "No changes to push"
+          git push origin HEAD:main || echo "No changes to push"
 
       - name: Add annotation for Sonar metrics
         if: success()
