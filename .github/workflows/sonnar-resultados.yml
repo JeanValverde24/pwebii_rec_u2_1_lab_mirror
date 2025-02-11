@@ -22,16 +22,19 @@ jobs:
 
       - name: Restore dependencies
         run: dotnet restore
+        working-directory: src  # ✅ Ahora se ejecuta en `src`
 
       - name: Build project
         run: dotnet build --no-restore
+        working-directory: src  # ✅ Se asegura de construir en `src`
 
       - name: Run tests and collect coverage
         run: dotnet test --no-build --collect:"XPlat Code Coverage" --logger trx
+        working-directory: src  # ✅ Ahora las pruebas se ejecutan en `src`
 
       - name: Convert coverage to Markdown
         run: |
-          reportgenerator -reports:**/coverage.cobertura.xml -targetdir:coverage -reporttypes:MarkdownSummary
+          reportgenerator -reports:src/**/coverage.cobertura.xml -targetdir:coverage -reporttypes:MarkdownSummary
 
       - name: Extract coverage percentage
         id: coverage
@@ -62,7 +65,7 @@ jobs:
   sonar:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
-    needs: coverage  # Ejecuta después del análisis de cobertura
+    needs: coverage  # ✅ Se ejecuta después del análisis de cobertura
 
     steps:
       - name: Checkout repository
@@ -75,9 +78,11 @@ jobs:
 
       - name: Restore dependencies
         run: dotnet restore
+        working-directory: src  # ✅ Se ejecuta en `src`
 
       - name: Build project
         run: dotnet build --no-restore
+        working-directory: src  # ✅ Se ejecuta en `src`
 
       - name: Prepare SonarCloud Analysis
         env:
@@ -85,11 +90,13 @@ jobs:
         run: |
           dotnet tool install --global dotnet-sonarscanner
           dotnet sonarscanner begin /k:"YOUR_PROJECT_KEY" /o:"YOUR_ORG_KEY" /d:sonar.token="${{ secrets.SONAR_TOKEN }}" /d:sonar.host.url="https://sonarcloud.io"
+        working-directory: src  # ✅ Se asegura de ejecutarlo en `src`
 
       - name: Run SonarCloud Analysis
         run: |
           dotnet build
           dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
+        working-directory: src  # ✅ Ahora se ejecuta correctamente en `src`
 
       - name: Fetch SonarCloud Metrics
         run: |
