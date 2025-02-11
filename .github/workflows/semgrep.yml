@@ -1,4 +1,4 @@
-name: Semgrep
+name: Semgrep Scan
 
 on:
   workflow_dispatch: {}
@@ -28,35 +28,29 @@ jobs:
         run: |
           semgrep ci --json > semgrep_results.json || true
 
-      - name: Parse Semgrep results and convert to Markdown
+      - name: Extract Semgrep results
+        id: semgrep_metrics
         run: |
-          echo "## 🛡️ Semgrep Security Scan Results" > semgrep_results.md
-          echo "" >> semgrep_results.md
-          findings=$(jq '.results | length' semgrep_results.json)
-          
-          if [[ "$findings" -eq 0 ]]; then
-            echo "✅ No security findings detected!" >> semgrep_results.md
-          else
-            jq -r '.results[] | "### 🔹 Rule: \(.check_id)\n- **File:** \(.path)\n- **Message:** \(.extra.message)\n- [🔗 Details](\(.extra.metadata.owasp_category))\n"' semgrep_results.json >> semgrep_results.md
-          fi
+          TOTAL_FINDINGS=$(jq '.results | length' semgrep_results.json || echo "0")
+          BLOCKING_FINDINGS=$(jq '[.results[] | select(.extra.severity == "ERROR")] | length' semgrep_results.json || echo "0")
+          WARNINGS=$(jq '[.results[] | select(.extra.severity == "WARNING")] | length' semgrep_results.json || echo "0")
+          INFO=$(jq '[.results[] | select(.extra.severity == "INFO")] | length' semgrep_results.json || echo "0")
 
-      - name: Update README.md with Semgrep results
-        run: |
-          sed -i '/## 🛡️ Semgrep Security Scan Results/,$d' README.md
-          cat semgrep_results.md >> README.md
+          echo "TOTAL_FINDINGS=$TOTAL_FINDINGS" >> $GITHUB_ENV
+          echo "BLOCKING_FINDINGS=$BLOCKING_FINDINGS" >> $GITHUB_ENV
+          echo "WARNINGS=$WARNINGS" >> $GITHUB_ENV
+          echo "INFO=$INFO" >> $GITHUB_ENV
 
-      - name: Commit and push Semgrep results
-        env:
-          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      - name: Display Semgrep Results in Annotations
         run: |
-          git config --global user.name "JeanValverde24"
-          git config --global user.email "jeanvalverde24@example.com"
-          git remote set-url origin https://${{ secrets.PAT_TOKEN }}@github.com/JeanValverde24/pwebii_rec_u2_1_lab_mirror.git
-          git add README.md
-          git commit -m "🔍 Update Semgrep Security Scan results in README.md" || echo "No changes to commit"
-          git push origin HEAD:main || echo "No changes to push"
+          echo "::notice title=Semgrep Security Report::| Severity | Count |
+          |----------|-------|
+          | 🔥 Blocking Findings | ${{ env.BLOCKING_FINDINGS }} |
+          | ⚠️ Warnings | ${{ env.WARNINGS }} |
+          | ℹ️ Informational | ${{ env.INFO }} |
+          | 📊 Total Findings | ${{ env.TOTAL_FINDINGS }} |"
 
-      - name: Add annotations for security findings
-        if: success()
+      - name: Add Detailed Annotations for Findings
+        if: env.TOTAL_FINDINGS != '0'
         run: |
-          jq -r '.results[] | "::warning file=\(.path),title=Semgrep Security Issue::\(.extra.message)"' semgrep_results.json
+          jq -r '.results[] | "::warning file=\(.path),title=Semgrep Issue::\(.extra.message) [Rule: \(.check_id)]"' semgrep_results.json
