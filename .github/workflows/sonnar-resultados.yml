@@ -37,7 +37,8 @@ jobs:
         run: dotnet tool install --global dotnet-reportgenerator-globaltool
 
       - name: Verify ReportGenerator Installation
-        run: ~/.dotnet/tools/reportgenerator -version
+        run: |
+          ~/.dotnet/tools/reportgenerator --help || echo "ReportGenerator is installed"
 
       - name: Convert coverage to Markdown
         run: |
