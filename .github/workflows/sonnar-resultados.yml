@@ -22,25 +22,26 @@ jobs:
 
       - name: Restore dependencies
         run: dotnet restore
-        working-directory: src  # ✅ Ahora se ejecuta en `src`
+        working-directory: src
 
       - name: Build project
         run: dotnet build --no-restore
-        working-directory: src  # ✅ Se asegura de construir en `src`
+        working-directory: src
 
       - name: Run tests and collect coverage
-        run: dotnet test --no-build --collect:"XPlat Code Coverage" --logger trx
-        working-directory: src  # ✅ Ahora las pruebas se ejecutan en `src`
+        run: |
+          dotnet test --no-build --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger trx
+        working-directory: src
 
       - name: Install ReportGenerator
         run: dotnet tool install --global dotnet-reportgenerator-globaltool
 
       - name: Verify ReportGenerator Installation
-        run: reportgenerator -version
+        run: ~/.dotnet/tools/reportgenerator -version
 
       - name: Convert coverage to Markdown
         run: |
-          ~/.dotnet/tools/reportgenerator -reports:src/**/coverage.cobertura.xml -targetdir:coverage -reporttypes:MarkdownSummary
+          ~/.dotnet/tools/reportgenerator -reports:src/**/TestResults/**/coverage.cobertura.xml -targetdir:coverage -reporttypes:MarkdownSummary
 
       - name: Extract coverage percentage
         id: coverage
@@ -71,7 +72,7 @@ jobs:
   sonar:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
-    needs: coverage  # ✅ Se ejecuta después del análisis de cobertura
+    needs: coverage
 
     steps:
       - name: Checkout repository
@@ -84,11 +85,11 @@ jobs:
 
       - name: Restore dependencies
         run: dotnet restore
-        working-directory: src  # ✅ Se ejecuta en `src`
+        working-directory: src
 
       - name: Build project
         run: dotnet build --no-restore
-        working-directory: src  # ✅ Se ejecuta en `src`
+        working-directory: src
 
       - name: Prepare SonarCloud Analysis
         env:
@@ -96,13 +97,13 @@ jobs:
         run: |
           dotnet tool install --global dotnet-sonarscanner
           dotnet sonarscanner begin /k:"YOUR_PROJECT_KEY" /o:"YOUR_ORG_KEY" /d:sonar.token="${{ secrets.SONAR_TOKEN }}" /d:sonar.host.url="https://sonarcloud.io"
-        working-directory: src  # ✅ Se asegura de ejecutarlo en `src`
+        working-directory: src
 
       - name: Run SonarCloud Analysis
         run: |
           dotnet build
           dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
-        working-directory: src  # ✅ Ahora se ejecuta correctamente en `src`
+        working-directory: src
 
       - name: Fetch SonarCloud Metrics
         run: |
@@ -133,4 +134,3 @@ jobs:
         if: success()
         run: |
           echo "::notice title=SonarCloud Report::Security Hotspots: $(curl -s https://sonarcloud.io/api/measures/component?component=YOUR_PROJECT_KEY&metricKeys=security_hotspots | jq '.component.measures[0].value'), Code Smells: $(curl -s https://sonarcloud.io/api/measures/component?component=YOUR_PROJECT_KEY&metricKeys=code_smells | jq '.component.measures[0].value'), Coverage: $(curl -s https://sonarcloud.io/api/measures/component?component=YOUR_PROJECT_KEY&metricKeys=coverage | jq '.component.measures[0].value')%"
-
