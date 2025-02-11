@@ -33,7 +33,7 @@ jobs:
           dotnet test --no-build --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger trx
         working-directory: src
 
-      - name: Verificar archivos de cobertura generados
+      - name: Verify Coverage File Exists
         run: |
           echo "Listando archivos en src/TestResults/"
           ls -R src/TestResults/ || echo "⚠️ No se encontraron archivos de cobertura."
@@ -45,43 +45,22 @@ jobs:
         run: |
           ~/.dotnet/tools/reportgenerator --help || echo "✅ ReportGenerator instalado correctamente."
 
-      - name: Convert coverage to Markdown
+      - name: Generate Coverage Report
         run: |
-          ~/.dotnet/tools/reportgenerator -reports:src/TestResults/**/*.cobertura.xml -targetdir:coverage -reporttypes:MarkdownSummary
+          ~/.dotnet/tools/reportgenerator -reports:src/TestResults/**/*.cobertura.xml -targetdir:coverage -reporttypes:Html
 
-      - name: Extract coverage percentage
-        id: coverage
+      - name: Extract coverage metrics
+        id: coverage_metrics
         run: |
-          if [ -f "coverage/Summary.md" ]; then
-            COVERAGE=$(grep -oP '(?<=Total Coverage: )\d+\.\d+' coverage/Summary.md || echo "0.00")
-            echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
-          else
-            echo "No se encontró Summary.md. Estableciendo cobertura en 0%."
-            echo "COVERAGE=0.00" >> $GITHUB_ENV
-          fi
+          TOTAL_COVERAGE=$(grep -oP '(?<=<coverage line-rate=")\d+\.\d+' coverage/index.html || echo "0.00")
+          echo "TOTAL_COVERAGE=$TOTAL_COVERAGE" >> $GITHUB_ENV
+          echo "Total Coverage: $TOTAL_COVERAGE%"
 
-      - name: Update README.md with coverage
+      - name: Display Coverage Metrics in Annotations
         run: |
-          sed -i '/## 📊 Code Coverage Report/,$d' README.md
-          echo "## 📊 Code Coverage Report" >> README.md
-          echo "" >> README.md
-          cat coverage/Summary.md >> README.md
-
-      - name: Commit and push coverage results
-        env:
-          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-        run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          git remote set-url origin https://x-access-token:${PAT_TOKEN}@github.com/TU_USUARIO/TU_REPOSITORIO.git
-          git add README.md
-          git commit -m "📈 Update Code Coverage report in README.md" || echo "No changes to commit"
-          git push origin HEAD:main || echo "No changes to push"
-
-      - name: Add annotation for code coverage
-        if: success()
-        run: |
-          echo "::notice title=Code Coverage Report::Coverage: ${{ env.COVERAGE }}%"
+          echo "::notice title=Code Coverage Report::| Metric | Value |
+          |--------|-------|
+          | Total Coverage | ${{ env.TOTAL_COVERAGE }}% |"
 
   sonar:
     name: SonarCloud Analysis
@@ -120,34 +99,26 @@ jobs:
         working-directory: src
 
       - name: Fetch SonarCloud Metrics
+        id: sonar_metrics
         run: |
-          echo "## 📊 SonarCloud Metrics" > sonar_metrics.md
-          echo "" >> sonar_metrics.md
-          echo "| Metric | Value |" >> sonar_metrics.md
-          echo "|--------|-------|" >> sonar_metrics.md
-          echo "| Security Hotspots | $(curl -s https://sonarcloud.io/api/measures/component?component=TU_PROYECTO_KEY&metricKeys=security_hotspots | jq '.component.measures[0].value') |" >> sonar_metrics.md
-          echo "| Code Smells | $(curl -s https://sonarcloud.io/api/measures/component?component=TU_PROYECTO_KEY&metricKeys=code_smells | jq '.component.measures[0].value') |" >> sonar_metrics.md
-          echo "| Coverage | $(curl -s https://sonarcloud.io/api/measures/component?component=TU_PROYECTO_KEY&metricKeys=coverage | jq '.component.measures[0].value')% |" >> sonar_metrics.md
-          echo "| Bugs | $(curl -s https://sonarcloud.io/api/measures/component?component=TU_PROYECTO_KEY&metricKeys=bugs | jq '.component.measures[0].value') |" >> sonar_metrics.md
-          echo "| Duplications | $(curl -s https://sonarcloud.io/api/measures/component?component=TU_PROYECTO_KEY&metricKeys=duplicated_lines_density | jq '.component.measures[0].value')% |" >> sonar_metrics.md
+          SECURITY_HOTSPOTS=$(curl -s https://sonarcloud.io/api/measures/component?component=TU_PROYECTO_KEY&metricKeys=security_hotspots | jq '.component.measures[0].value')
+          CODE_SMELLS=$(curl -s https://sonarcloud.io/api/measures/component?component=TU_PROYECTO_KEY&metricKeys=code_smells | jq '.component.measures[0].value')
+          COVERAGE=$(curl -s https://sonarcloud.io/api/measures/component?component=TU_PROYECTO_KEY&metricKeys=coverage | jq '.component.measures[0].value')
+          BUGS=$(curl -s https://sonarcloud.io/api/measures/component?component=TU_PROYECTO_KEY&metricKeys=bugs | jq '.component.measures[0].value')
+          DUPLICATIONS=$(curl -s https://sonarcloud.io/api/measures/component?component=TU_PROYECTO_KEY&metricKeys=duplicated_lines_density | jq '.component.measures[0].value')
 
-      - name: Update README.md with Sonar metrics
-        run: |
-          sed -i '/## 📊 SonarCloud Metrics/,$d' README.md
-          cat sonar_metrics.md >> README.md
+          echo "SECURITY_HOTSPOTS=$SECURITY_HOTSPOTS" >> $GITHUB_ENV
+          echo "CODE_SMELLS=$CODE_SMELLS" >> $GITHUB_ENV
+          echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
+          echo "BUGS=$BUGS" >> $GITHUB_ENV
+          echo "DUPLICATIONS=$DUPLICATIONS" >> $GITHUB_ENV
 
-      - name: Commit and push Sonar metrics
-        env:
-          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      - name: Display SonarCloud Metrics in Annotations
         run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          git remote set-url origin https://x-access-token:${PAT_TOKEN}@github.com/JeanValverde24/pwebii_rec_u2_1_lab_mirror.git
-          git add README.md
-          git commit -m "📊 Update SonarCloud metrics in README.md" || echo "No changes to commit"
-          git push origin HEAD:main || echo "No changes to push"
-
-      - name: Add annotation for Sonar metrics
-        if: success()
-        run: |
-          echo "::notice title=SonarCloud Report::Security Hotspots: $(curl -s https://sonarcloud.io/api/measures/component?component=TU_PROYECTO_KEY&metricKeys=security_hotspots | jq '.component.measures[0].value'), Code Smells: $(curl -s https://sonarcloud.io/api/measures/component?component=TU_PROYECTO_KEY&metricKeys=code_smells | jq '.component.measures[0].value'), Coverage: $(curl -s https://sonarcloud.io/api/measures/component?component=TU_PROYECTO_KEY&metricKeys=coverage | jq '.component.measures[0].value')%"
+          echo "::notice title=SonarCloud Report::| Metric | Value |
+          |--------|-------|
+          | Security Hotspots | ${{ env.SECURITY_HOTSPOTS }} |
+          | Code Smells | ${{ env.CODE_SMELLS }} |
+          | Coverage | ${{ env.COVERAGE }}% |
+          | Bugs | ${{ env.BUGS }} |
+          | Duplications | ${{ env.DUPLICATIONS }}% |"
