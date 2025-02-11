@@ -10,26 +10,29 @@ on:
     paths:
       - .github/workflows/semgrep.yml
   schedule:
-    # Random HH:MM to avoid a load spike on GitHub Actions at 00:00
+    # random HH:MM to avoid una carga excesiva en GitHub Actions a las 00:00
     - cron: '58 17 * * *'
 
 jobs:
   semgrep:
-    name: semgrep/ci
+    name: Semgrep Security Analysis
     runs-on: ubuntu-20.04
     env:
       SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
     container:
       image: returntocorp/semgrep
     steps:
-      - uses: actions/checkout@v4
-      - run: semgrep ci
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep Analysis
+        run: semgrep ci
 
   sonarcloud-analysis:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -38,6 +41,7 @@ jobs:
         uses: actions/setup-java@v3
         with:
           java-version: '11'
+          distribution: 'temurin'
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v1.0.0
@@ -59,7 +63,7 @@ jobs:
           SONAR_API_URL="https://sonarcloud.io/api/measures/component"
           PROJECT_KEY="pwebii_rec_u2_1_lab_mirror"
           METRICS="bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,complexity,ncloc,cognitive_complexity,comment_lines_density,security_rating,reliability_rating,sqale_rating"
-
+          
           echo "Fetching SonarCloud Metrics..."
           RESPONSE=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_API_URL?component=$PROJECT_KEY&metricKeys=$METRICS")
 
