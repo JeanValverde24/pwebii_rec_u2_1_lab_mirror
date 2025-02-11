@@ -7,26 +7,21 @@ on:
     branches:
       - main
       - master
-    paths:
-      - .github/workflows/ci.yml
   schedule:
-    # Ejecuta diariamente a las 17:58 UTC
-    - cron: '58 17 * * *'
+    - cron: '58 17 * * *'  # Ejecuta diariamente a las 17:58 UTC
 
 jobs:
   semgrep:
     name: Semgrep Analysis
-    runs-on: ubuntu-20.04
-    env:
-      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
-    container:
-      image: returntocorp/semgrep
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
+      
       - name: Run Semgrep Scan
         run: semgrep ci
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
   sonarcloud-analysis:
     name: SonarCloud Analysis
@@ -35,13 +30,38 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Permite análisis completo
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '6.0.x'  # Asegura que se use la versión correcta
 
       - name: Setup Java
         uses: actions/setup-java@v3
         with:
-          distribution: 'temurin' # Requerido para evitar errores
+          distribution: 'temurin'
           java-version: '11'
+
+      - name: Restore Dependencies
+        run: dotnet restore
+
+      - name: Build Solution
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Run Tests and Generate Coverage Report
+        run: dotnet test --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory ./coverage
+      
+      - name: Convert Coverage Report to SonarCloud Format
+        run: |
+          REPORT_PATH=$(find ./coverage -name 'coverage.cobertura.xml' | head -n 1)
+          if [ -f "$REPORT_PATH" ]; then
+            echo "Coverage report found: $REPORT_PATH"
+          else
+            echo "Coverage report not found!"
+            exit 1
+          fi
+          echo "COVERAGE_REPORT=$REPORT_PATH" >> $GITHUB_ENV
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v1.0.0
@@ -54,13 +74,14 @@ jobs:
             -Dsonar.organization=jeanvalverde24
             -Dsonar.projectKey=pwebii_rec_u2_1_lab_mirror
             -Dsonar.sources=.
+            -Dsonar.coverageReportPaths=${{ env.COVERAGE_REPORT }}
+            -Dsonar.verbose=true
 
       - name: Fetch SonarCloud Metrics and Display
         id: fetch-metrics
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          set -e
           SONAR_API_URL="https://sonarcloud.io/api/measures/component"
           PROJECT_KEY="pwebii_rec_u2_1_lab_mirror"
           METRICS="bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,complexity,ncloc,cognitive_complexity,comment_lines_density,security_rating,reliability_rating,sqale_rating"
@@ -69,11 +90,10 @@ jobs:
           RESPONSE=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_API_URL?component=$PROJECT_KEY&metricKeys=$METRICS")
           
           if [[ -z "$RESPONSE" || "$RESPONSE" == *"errors"* ]]; then
-            echo "Error fetching SonarCloud metrics. Please check the project key and SonarCloud API token."
+            echo "Error fetching SonarCloud metrics."
             exit 1
           fi
 
-          echo "SonarCloud API Response: $RESPONSE"
           echo "response=$RESPONSE" >> $GITHUB_ENV
 
       - name: Publish SonarCloud Metrics as Annotations
@@ -81,30 +101,18 @@ jobs:
           echo "## SonarCloud Metrics" >> $GITHUB_STEP_SUMMARY
           echo "| Metric               | Value   | Icon       |" >> $GITHUB_STEP_SUMMARY
           echo "|----------------------|---------|------------|" >> $GITHUB_STEP_SUMMARY
-          
           echo $RESPONSE | jq -r '.component.measures[] | 
-          if .metric == "coverage" then 
-            "| Coverage             | \(.value)% | :white_check_mark: |" | tee >(echo "::notice title=Coverage::Coverage: \(.value)%")
-          elif .metric == "complexity" then 
-            "| Complexity           | \(.value) | :triangular_ruler: |" | tee >(echo "::notice title=Complexity::Complexity: \(.value)")
-          elif .metric == "ncloc" then 
-            "| Lines of Code        | \(.value) | :scroll: |" | tee >(echo "::notice title=Lines of Code::Lines of Code: \(.value)")
-          elif .metric == "security_rating" then 
-            "| Security Rating      | \(.value) | :shield: |" | tee >(echo "::warning title=Security Rating::Security Rating: \(.value)")
-          elif .metric == "reliability_rating" then 
-            "| Reliability Rating   | \(.value) | :tools: |" | tee >(echo "::notice title=Reliability Rating::Reliability Rating: \(.value)")
-          elif .metric == "sqale_rating" then 
-            "| Maintainability      | \(.value) | :recycle: |" | tee >(echo "::notice title=Maintainability::Maintainability: \(.value)")
-          elif .metric == "code_smells" then 
-            "| Code Smells          | \(.value) | :nose: |" | tee >(echo "::warning title=Code Smells::Code Smells: \(.value)")
-          elif .metric == "duplicated_lines_density" then 
-            "| Duplications         | \(.value)% | :twisted_rightwards_arrows: |" | tee >(echo "::warning title=Duplications::Duplications: \(.value)%")
-          elif .metric == "cognitive_complexity" then 
-            "| Cognitive Complexity | \(.value) | :brain: |" | tee >(echo "::notice title=Cognitive Complexity::Cognitive Complexity: \(.value)")
-          elif .metric == "bugs" then 
-            "| Bugs                 | \(.value) | :bug: |" | tee >(echo "::error title=Bugs::Bugs: \(.value)")
-          elif .metric == "comment_lines_density" then 
-            "| Comment Density      | \(.value)% | :speech_balloon: |" | tee >(echo "::notice title=Comment Density::Comment Density: \(.value)%")
+          if .metric == "coverage" then "| Coverage             | \(.value)% | :white_check_mark: |" 
+          elif .metric == "complexity" then "| Complexity           | \(.value) | :triangular_ruler: |" 
+          elif .metric == "ncloc" then "| Lines of Code        | \(.value) | :scroll: |" 
+          elif .metric == "security_rating" then "| Security Rating      | \(.value) | :shield: |" 
+          elif .metric == "reliability_rating" then "| Reliability Rating   | \(.value) | :tools: |" 
+          elif .metric == "sqale_rating" then "| Maintainability      | \(.value) | :recycle: |" 
+          elif .metric == "code_smells" then "| Code Smells          | \(.value) | :nose: |" 
+          elif .metric == "duplicated_lines_density" then "| Duplications         | \(.value)% | :twisted_rightwards_arrows: |" 
+          elif .metric == "cognitive_complexity" then "| Cognitive Complexity | \(.value) | :brain: |" 
+          elif .metric == "bugs" then "| Bugs                 | \(.value) | :bug: |" 
+          elif .metric == "comment_lines_density" then "| Comment Density      | \(.value)% | :speech_balloon: |" 
           else empty end' >> $GITHUB_STEP_SUMMARY
         env:
           RESPONSE: ${{ env.response }}
