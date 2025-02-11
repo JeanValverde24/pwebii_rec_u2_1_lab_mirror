@@ -1,0 +1,122 @@
+name: SonarCloud & Code Coverage Analysis
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '6.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build project
+        run: dotnet build --no-restore
+
+      - name: Run tests and collect coverage
+        run: dotnet test --no-build --collect:"XPlat Code Coverage" --logger trx
+
+      - name: Convert coverage to Markdown
+        run: |
+          reportgenerator -reports:**/coverage.cobertura.xml -targetdir:coverage -reporttypes:MarkdownSummary
+
+      - name: Extract coverage percentage
+        id: coverage
+        run: |
+          COVERAGE=$(grep -oP '(?<=Total Coverage: )\d+\.\d+' coverage/Summary.md)
+          echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
+
+      - name: Update README.md with coverage
+        run: |
+          sed -i '/## 📊 Code Coverage Report/,$d' README.md
+          echo "## 📊 Code Coverage Report" >> README.md
+          echo "" >> README.md
+          cat coverage/Summary.md >> README.md
+
+      - name: Commit and push results
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add README.md
+          git commit -m "📈 Update Code Coverage report in README.md" || echo "No changes to commit"
+          git push || echo "No changes to push"
+
+      - name: Add annotation for code coverage
+        if: success()
+        run: |
+          echo "::notice title=Code Coverage Report::Coverage: ${{ env.COVERAGE }}%"
+
+  sonar:
+    name: SonarCloud Analysis
+    runs-on: ubuntu-latest
+    needs: coverage  # Ejecuta después del análisis de cobertura
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '6.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build project
+        run: dotnet build --no-restore
+
+      - name: Prepare SonarCloud Analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          dotnet tool install --global dotnet-sonarscanner
+          dotnet sonarscanner begin /k:"YOUR_PROJECT_KEY" /o:"YOUR_ORG_KEY" /d:sonar.token="${{ secrets.SONAR_TOKEN }}" /d:sonar.host.url="https://sonarcloud.io"
+
+      - name: Run SonarCloud Analysis
+        run: |
+          dotnet build
+          dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
+
+      - name: Fetch SonarCloud Metrics
+        run: |
+          echo "## 📊 SonarCloud Metrics" > sonar_metrics.md
+          echo "" >> sonar_metrics.md
+          echo "| Metric | Value |" >> sonar_metrics.md
+          echo "|--------|-------|" >> sonar_metrics.md
+          echo "| Security Hotspots | $(curl -s https://sonarcloud.io/api/measures/component?component=YOUR_PROJECT_KEY&metricKeys=security_hotspots | jq '.component.measures[0].value') |" >> sonar_metrics.md
+          echo "| Code Smells | $(curl -s https://sonarcloud.io/api/measures/component?component=YOUR_PROJECT_KEY&metricKeys=code_smells | jq '.component.measures[0].value') |" >> sonar_metrics.md
+          echo "| Coverage | $(curl -s https://sonarcloud.io/api/measures/component?component=YOUR_PROJECT_KEY&metricKeys=coverage | jq '.component.measures[0].value')% |" >> sonar_metrics.md
+          echo "| Bugs | $(curl -s https://sonarcloud.io/api/measures/component?component=YOUR_PROJECT_KEY&metricKeys=bugs | jq '.component.measures[0].value') |" >> sonar_metrics.md
+          echo "| Duplications | $(curl -s https://sonarcloud.io/api/measures/component?component=YOUR_PROJECT_KEY&metricKeys=duplicated_lines_density | jq '.component.measures[0].value')% |" >> sonar_metrics.md
+
+      - name: Update README.md with Sonar metrics
+        run: |
+          sed -i '/## 📊 SonarCloud Metrics/,$d' README.md
+          cat sonar_metrics.md >> README.md
+
+      - name: Commit and push Sonar metrics
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add README.md
+          git commit -m "📊 Update SonarCloud metrics in README.md" || echo "No changes to commit"
+          git push || echo "No changes to push"
+
+      - name: Add annotation for Sonar metrics
+        if: success()
+        run: |
+          echo "::notice title=SonarCloud Report::Security Hotspots: $(curl -s https://sonarcloud.io/api/measures/component?component=YOUR_PROJECT_KEY&metricKeys=security_hotspots | jq '.component.measures[0].value'), Code Smells: $(curl -s https://sonarcloud.io/api/measures/component?component=YOUR_PROJECT_KEY&metricKeys=code_smells | jq '.component.measures[0].value'), Coverage: $(curl -s https://sonarcloud.io/api/measures/component?component=YOUR_PROJECT_KEY&metricKeys=coverage | jq '.component.measures[0].value')%"
