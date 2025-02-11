@@ -51,7 +51,7 @@ jobs:
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-          git remote set-url origin https://x-access-token:${PAT_TOKEN}@github.com/TU_USUARIO/TU_REPOSITORIO.git
+          git remote set-url origin https://x-access-token:${PAT_TOKEN}@github.com/JeanValverde24/pwebii_rec_u2_1_lab_mirror.git
           git add README.md
           git commit -m "🔍 Update Semgrep Security Scan results in README.md" || echo "No changes to commit"
           git push origin HEAD:main || echo "No changes to push"
