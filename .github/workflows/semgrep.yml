@@ -1,122 +1,24 @@
-name: CI Pipeline
-
 on:
   workflow_dispatch: {}
   pull_request: {}
   push:
     branches:
-      - main
-      - master
+    - main
+    - master
     paths:
-      - .github/workflows/ci.yml
+    - .github/workflows/semgrep.yml
   schedule:
-    - cron: '58 17 * * *'  # Ejecuta diariamente a las 17:58 UTC
-
+  # random HH:MM to avoid a load spike on GitHub Actions at 00:00
+  - cron: 58 17 * * *
+name: Semgrep
 jobs:
-  semgrep_analysis:
-    name: 🔍 Semgrep Static Analysis
+  semgrep:
+    name: semgrep/ci
     runs-on: ubuntu-20.04
+    env:
+      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
     container:
       image: returntocorp/semgrep
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      
-      - name: Run Semgrep Scan
-        run: semgrep ci
-        env:
-          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
-
-  sonarcloud_analysis:
-    name: 🚀 SonarCloud Code Analysis
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: '6.0.x'
-
-      - name: Setup Java (Required for SonarCloud)
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '11'
-
-      - name: Restore Dependencies
-        run: dotnet restore
-
-      - name: Build Solution
-        run: dotnet build --configuration Release --no-restore
-
-      - name: Run Tests and Generate Coverage Report
-        run: dotnet test --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory ./coverage
-      
-      - name: Convert Coverage Report to SonarCloud Format
-        run: |
-          REPORT_PATH=$(find ./coverage -name 'coverage.cobertura.xml' | head -n 1)
-          if [ -f "$REPORT_PATH" ]; then
-            echo "Coverage report found: $REPORT_PATH"
-          else
-            echo "Coverage report not found!"
-            exit 1
-          fi
-          echo "COVERAGE_REPORT=$REPORT_PATH" >> $GITHUB_ENV
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@v1.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: "https://sonarcloud.io"
-        with:
-          args: >
-            -Dsonar.organization=jeanvalverde24
-            -Dsonar.projectKey=pwebii_rec_u2_1_lab_mirror
-            -Dsonar.sources=.
-            -Dsonar.coverageReportPaths=${{ env.COVERAGE_REPORT }}
-            -Dsonar.verbose=true
-
-      - name: Fetch SonarCloud Metrics and Display
-        id: fetch-metrics
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          SONAR_API_URL="https://sonarcloud.io/api/measures/component"
-          PROJECT_KEY="pwebii_rec_u2_1_lab_mirror"
-          METRICS="bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,complexity,ncloc,cognitive_complexity,comment_lines_density,security_rating,reliability_rating,sqale_rating"
-          
-          echo "Fetching SonarCloud Metrics..."
-          RESPONSE=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_API_URL?component=$PROJECT_KEY&metricKeys=$METRICS")
-          
-          if [[ -z "$RESPONSE" || "$RESPONSE" == *"errors"* ]]; then
-            echo "Error fetching SonarCloud metrics."
-            exit 1
-          fi
-
-          echo "response=$RESPONSE" >> $GITHUB_ENV
-
-      - name: Publish SonarCloud Metrics as Annotations
-        run: |
-          echo "## SonarCloud Metrics" >> $GITHUB_STEP_SUMMARY
-          echo "| Metric               | Value   | Icon       |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------------------|---------|------------|" >> $GITHUB_STEP_SUMMARY
-          echo $RESPONSE | jq -r '.component.measures[] | 
-          if .metric == "coverage" then "| Coverage             | \(.value)% | :white_check_mark: |" 
-          elif .metric == "complexity" then "| Complexity           | \(.value) | :triangular_ruler: |" 
-          elif .metric == "ncloc" then "| Lines of Code        | \(.value) | :scroll: |" 
-          elif .metric == "security_rating" then "| Security Rating      | \(.value) | :shield: |" 
-          elif .metric == "reliability_rating" then "| Reliability Rating   | \(.value) | :tools: |" 
-          elif .metric == "sqale_rating" then "| Maintainability      | \(.value) | :recycle: |" 
-          elif .metric == "code_smells" then "| Code Smells          | \(.value) | :nose: |" 
-          elif .metric == "duplicated_lines_density" then "| Duplications         | \(.value)% | :twisted_rightwards_arrows: |" 
-          elif .metric == "cognitive_complexity" then "| Cognitive Complexity | \(.value) | :brain: |" 
-          elif .metric == "bugs" then "| Bugs                 | \(.value) | :bug: |" 
-          elif .metric == "comment_lines_density" then "| Comment Density      | \(.value)% | :speech_balloon: |" 
-          else empty end' >> $GITHUB_STEP_SUMMARY
-        env:
-          RESPONSE: ${{ env.response }}
+    - uses: actions/checkout@v4
+    - run: semgrep ci
