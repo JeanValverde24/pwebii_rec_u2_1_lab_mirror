@@ -13,11 +13,9 @@ on:
     - cron: '58 17 * * *'  # Ejecuta diariamente a las 17:58 UTC
 
 jobs:
-  semgrep:
-    name: Semgrep Static Analysis
+  semgrep_analysis:
+    name: 🔍 Semgrep Static Analysis
     runs-on: ubuntu-20.04
-    env:
-      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
     container:
       image: returntocorp/semgrep
     steps:
@@ -26,9 +24,11 @@ jobs:
       
       - name: Run Semgrep Scan
         run: semgrep ci
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
-  sonarcloud-analysis:
-    name: SonarCloud Code Analysis
+  sonarcloud_analysis:
+    name: 🚀 SonarCloud Code Analysis
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
