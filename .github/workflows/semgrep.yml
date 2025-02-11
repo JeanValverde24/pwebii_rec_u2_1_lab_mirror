@@ -81,18 +81,30 @@ jobs:
           echo "## SonarCloud Metrics" >> $GITHUB_STEP_SUMMARY
           echo "| Metric               | Value   | Icon       |" >> $GITHUB_STEP_SUMMARY
           echo "|----------------------|---------|------------|" >> $GITHUB_STEP_SUMMARY
+          
           echo $RESPONSE | jq -r '.component.measures[] | 
-          if .metric == "coverage" then "| Coverage             | \(.value)% | :white_check_mark: |" 
-          elif .metric == "complexity" then "| Complexity           | \(.value) | :triangular_ruler: |" 
-          elif .metric == "ncloc" then "| Lines of Code        | \(.value) | :scroll: |" 
-          elif .metric == "security_rating" then "| Security Rating      | \(.value) | :shield: |" 
-          elif .metric == "reliability_rating" then "| Reliability Rating   | \(.value) | :tools: |" 
-          elif .metric == "sqale_rating" then "| Maintainability      | \(.value) | :recycle: |" 
-          elif .metric == "code_smells" then "| Code Smells          | \(.value) | :nose: |" 
-          elif .metric == "duplicated_lines_density" then "| Duplications         | \(.value)% | :twisted_rightwards_arrows: |" 
-          elif .metric == "cognitive_complexity" then "| Cognitive Complexity | \(.value) | :brain: |" 
-          elif .metric == "bugs" then "| Bugs                 | \(.value) | :bug: |" 
-          elif .metric == "comment_lines_density" then "| Comment Density      | \(.value)% | :speech_balloon: |" 
+          if .metric == "coverage" then 
+            "| Coverage             | \(.value)% | :white_check_mark: |" | tee >(echo "::notice title=Coverage::Coverage: \(.value)%")
+          elif .metric == "complexity" then 
+            "| Complexity           | \(.value) | :triangular_ruler: |" | tee >(echo "::notice title=Complexity::Complexity: \(.value)")
+          elif .metric == "ncloc" then 
+            "| Lines of Code        | \(.value) | :scroll: |" | tee >(echo "::notice title=Lines of Code::Lines of Code: \(.value)")
+          elif .metric == "security_rating" then 
+            "| Security Rating      | \(.value) | :shield: |" | tee >(echo "::warning title=Security Rating::Security Rating: \(.value)")
+          elif .metric == "reliability_rating" then 
+            "| Reliability Rating   | \(.value) | :tools: |" | tee >(echo "::notice title=Reliability Rating::Reliability Rating: \(.value)")
+          elif .metric == "sqale_rating" then 
+            "| Maintainability      | \(.value) | :recycle: |" | tee >(echo "::notice title=Maintainability::Maintainability: \(.value)")
+          elif .metric == "code_smells" then 
+            "| Code Smells          | \(.value) | :nose: |" | tee >(echo "::warning title=Code Smells::Code Smells: \(.value)")
+          elif .metric == "duplicated_lines_density" then 
+            "| Duplications         | \(.value)% | :twisted_rightwards_arrows: |" | tee >(echo "::warning title=Duplications::Duplications: \(.value)%")
+          elif .metric == "cognitive_complexity" then 
+            "| Cognitive Complexity | \(.value) | :brain: |" | tee >(echo "::notice title=Cognitive Complexity::Cognitive Complexity: \(.value)")
+          elif .metric == "bugs" then 
+            "| Bugs                 | \(.value) | :bug: |" | tee >(echo "::error title=Bugs::Bugs: \(.value)")
+          elif .metric == "comment_lines_density" then 
+            "| Comment Density      | \(.value)% | :speech_balloon: |" | tee >(echo "::notice title=Comment Density::Comment Density: \(.value)%")
           else empty end' >> $GITHUB_STEP_SUMMARY
         env:
           RESPONSE: ${{ env.response }}
