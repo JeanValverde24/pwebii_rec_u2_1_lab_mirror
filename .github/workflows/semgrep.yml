@@ -7,24 +7,28 @@ on:
     branches:
       - main
       - master
+    paths:
+      - .github/workflows/ci.yml
   schedule:
     - cron: '58 17 * * *'  # Ejecuta diariamente a las 17:58 UTC
 
 jobs:
   semgrep:
-    name: Semgrep Analysis
-    runs-on: ubuntu-latest
+    name: Semgrep Static Analysis
+    runs-on: ubuntu-20.04
+    env:
+      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+    container:
+      image: returntocorp/semgrep
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
       
       - name: Run Semgrep Scan
         run: semgrep ci
-        env:
-          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
   sonarcloud-analysis:
-    name: SonarCloud Analysis
+    name: SonarCloud Code Analysis
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -35,9 +39,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '6.0.x'  # Asegura que se use la versión correcta
+          dotnet-version: '6.0.x'
 
-      - name: Setup Java
+      - name: Setup Java (Required for SonarCloud)
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
