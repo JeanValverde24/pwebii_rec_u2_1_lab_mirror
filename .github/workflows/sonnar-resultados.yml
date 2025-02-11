@@ -33,7 +33,7 @@ jobs:
           dotnet test --no-build --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger trx
         working-directory: src
 
-      - name: Verify Coverage File Exists
+      - name: Verificar archivos de cobertura generados
         run: |
           echo "Listando archivos en src/TestResults/"
           ls -R src/TestResults/ || echo "⚠️ No se encontraron archivos de cobertura."
@@ -45,11 +45,11 @@ jobs:
         run: |
           ~/.dotnet/tools/reportgenerator --help || echo "✅ ReportGenerator instalado correctamente."
 
-      - name: Generate Coverage Report
+      - name: Convert coverage to HTML
         run: |
-          ~/.dotnet/tools/reportgenerator -reports:src/TestResults/**/*.cobertura.xml -targetdir:coverage -reporttypes:Html
+          ~/.dotnet/tools/reportgenerator -reports:src/TestResults/**/coverage.cobertura.xml -targetdir:coverage -reporttypes:Html
 
-      - name: Extract coverage metrics
+      - name: Extract coverage percentage
         id: coverage_metrics
         run: |
           TOTAL_COVERAGE=$(grep -oP '(?<=<coverage line-rate=")\d+\.\d+' coverage/index.html || echo "0.00")
