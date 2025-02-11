@@ -8,46 +8,47 @@ on:
       - main
       - master
     paths:
-      - .github/workflows/semgrep.yml
+      - .github/workflows/ci.yml
   schedule:
-    # random HH:MM to avoid una carga excesiva en GitHub Actions a las 00:00
+    # Ejecuta diariamente a las 17:58 UTC
     - cron: '58 17 * * *'
 
 jobs:
   semgrep:
-    name: Semgrep Security Analysis
+    name: Semgrep Analysis
     runs-on: ubuntu-20.04
     env:
       SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
     container:
       image: returntocorp/semgrep
     steps:
-      - name: Checkout Repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Run Semgrep Analysis
+      - name: Run Semgrep Scan
         run: semgrep ci
 
   sonarcloud-analysis:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # Permite análisis completo
 
       - name: Setup Java
         uses: actions/setup-java@v3
         with:
+          distribution: 'temurin' # Requerido para evitar errores
           java-version: '11'
-          distribution: 'temurin'
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: "https://sonarcloud.io"
         with:
           args: >
             -Dsonar.organization=jeanvalverde24
@@ -66,9 +67,8 @@ jobs:
           
           echo "Fetching SonarCloud Metrics..."
           RESPONSE=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_API_URL?component=$PROJECT_KEY&metricKeys=$METRICS")
-
+          
           if [[ -z "$RESPONSE" || "$RESPONSE" == *"errors"* ]]; then
-            echo "SonarCloud API Response: $RESPONSE"
             echo "Error fetching SonarCloud metrics. Please check the project key and SonarCloud API token."
             exit 1
           fi
