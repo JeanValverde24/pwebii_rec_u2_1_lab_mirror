@@ -32,9 +32,15 @@ jobs:
         run: dotnet test --no-build --collect:"XPlat Code Coverage" --logger trx
         working-directory: src  # ✅ Ahora las pruebas se ejecutan en `src`
 
+      - name: Install ReportGenerator
+        run: dotnet tool install --global dotnet-reportgenerator-globaltool
+
+      - name: Verify ReportGenerator Installation
+        run: reportgenerator -version
+
       - name: Convert coverage to Markdown
         run: |
-          reportgenerator -reports:src/**/coverage.cobertura.xml -targetdir:coverage -reporttypes:MarkdownSummary
+          ~/.dotnet/tools/reportgenerator -reports:src/**/coverage.cobertura.xml -targetdir:coverage -reporttypes:MarkdownSummary
 
       - name: Extract coverage percentage
         id: coverage
@@ -127,3 +133,4 @@ jobs:
         if: success()
         run: |
           echo "::notice title=SonarCloud Report::Security Hotspots: $(curl -s https://sonarcloud.io/api/measures/component?component=YOUR_PROJECT_KEY&metricKeys=security_hotspots | jq '.component.measures[0].value'), Code Smells: $(curl -s https://sonarcloud.io/api/measures/component?component=YOUR_PROJECT_KEY&metricKeys=code_smells | jq '.component.measures[0].value'), Coverage: $(curl -s https://sonarcloud.io/api/measures/component?component=YOUR_PROJECT_KEY&metricKeys=coverage | jq '.component.measures[0].value')%"
+
